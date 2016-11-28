@@ -1,0 +1,4 @@
+Max Latency Overall: {'DNVR': 200}
+Average Latency Overall: {'DLLS': 15, 'STLS': 185}
+Average-Max Latency Overall: {'DLLS': 54, 'DNVR': 57, 'STLS': 44, 'KSCY': 45}
+Max-Average Latency Overall: {'DLLS': 7, 'DNVR': 160, 'STLS': 13, 'KSCY': 6, 'CHCG': 14}
