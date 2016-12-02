@@ -65,28 +65,29 @@ Implement Pairing SDN with Network Virtualization paper in Gurobi
 """
 
 Q = 1
-num_sim = 1
-num_vnets = 10
+num_sim = 200
+num_vnets = 50
 sim_max = {}
 sim_avg = {}
 sim_avg_max = {}
 sim_max_avg = {}
 
-print('\nTotal number of trials: %s' % num_sim)
+print('\nTotal number of hypervisors: %s' % Q)
+print('Total number of trials: %s' % num_sim)
 print('Total number of virtual networks: %s' % num_vnets)
 
 # Trying out a Chinese network GML
-# G = nx.read_gml('Cernet.gml')
-#
-# # Add the length of each edge with the Vincenty function in GeoPy
-# for i,j in G.edges():
-#     i_coord = (G.node[i]['Latitude'], G.node[i]['Longitude'])
-#     j_coord = (G.node[j]['Latitude'], G.node[j]['Longitude'])
-#     G.edge[i][j]['length'] = vincenty(i_coord, j_coord).miles
-#
-# fw_path = nx.floyd_warshall(G, weight='length')
+G = nx.read_gml('Geant2012.gml')
 
-for sim in range(0, num_sim):
+# Add the length of each edge with the Vincenty function in GeoPy
+for i,j in G.edges():
+    i_coord = (G.node[i]['Latitude'], G.node[i]['Longitude'])
+    j_coord = (G.node[j]['Latitude'], G.node[j]['Longitude'])
+    G.edge[i][j]['length'] = vincenty(i_coord, j_coord).miles
+
+fw_path = nx.floyd_warshall(G, weight='length')
+
+for sim in range(1, num_sim+1):
     mod = Model('HypervisorModel')
 
     # Shut Gurobi up
@@ -369,6 +370,11 @@ for sim in range(0, num_sim):
     else:
         sim_max_avg[max_avg_sorted_answer[0][0]] = 1
 
+sim_max = sorted(sim_max.items(), key=operator.itemgetter(1), reverse=True)
+sim_avg = sorted(sim_avg.items(), key=operator.itemgetter(1), reverse=True)
+sim_avg_max = sorted(sim_avg_max.items(), key=operator.itemgetter(1), reverse=True)
+sim_max_avg = sorted(sim_max_avg.items(), key=operator.itemgetter(1), reverse=True)
+
 print('\nMax Latency Overall: %s' % sim_max)
 print('Average Latency Overall: %s' % sim_avg)
 print('Average-Max Latency Overall: %s' % sim_avg_max)
@@ -385,7 +391,7 @@ nx.draw_networkx_labels(G, pos, font_size=10, font_family='sans-serif', font_col
 
 # plt.figure(1)
 # plt.axis('off')
-# plt.savefig("att.png") # save as png
+# plt.savefig("geant.png") # save as png
 # plt.show()
 
 # Function for removing unnecessary information from the GML for ATT's network, and writing a modified GML.
