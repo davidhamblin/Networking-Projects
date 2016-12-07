@@ -4,29 +4,6 @@ import matplotlib.pyplot as plt
 from geopy.distance import vincenty
 import random
 
-
-G = nx.read_gml('AttModified.gml')
-
-# Add the length of each edge with the Vincenty function in GeoPy
-for i,j in G.edges():
-    i_coord = (G.node[i]['Latitude'], G.node[i]['Longitude'])
-    j_coord = (G.node[j]['Latitude'], G.node[j]['Longitude'])
-    G.edge[i][j]['length'] = vincenty(i_coord, j_coord).miles
-
-# Find all of the shortest paths using the Floyd-Warshall algorithm
-fw_path = nx.floyd_warshall(G, weight='length')
-
-# print("Edge measurements are reported in miles.\n")
-
-# Example virtual network for task 2
-virtual_nodes = {'ORLD': G.node['ORLD'], 'DLLS': G.node['DLLS'], 'WASH': G.node['WASH'], 'LA03': G.node['LA03']}
-virtual_nodes_2 = {'PHLA': G.node['PHLA'], 'HSTN': G.node['HSTN'], 'DNVR': G.node['DNVR'], 'RLGH': G.node['RLGH']}
-virtual_nodes_3 = {'SNAN': G.node['SNAN'], 'CHCG': G.node['CHCG'], 'NY54': G.node['NY54']}
-
-controller_node = 'PHNX'
-controller_node_2 = 'KSCY'
-controller_node_3 = 'STLS'
-
 # Given the substrate graph G and number of virtual nodes n, outputs a
 # virtual network with a randomly chosen controller and virtual nodes
 def vnet_generator(G, n):
@@ -39,6 +16,26 @@ def vnet_generator(G, n):
     vnet['vnodes'] = vnodes
     vnet['controller'] = G.nodes()[random.randrange(0, len(G.nodes()))]
     return vnet
+
+G = nx.read_gml('AttModified.gml')
+
+# Add the length of each edge with the Vincenty function in GeoPy
+for i,j in G.edges():
+    i_coord = (G.node[i]['Latitude'], G.node[i]['Longitude'])
+    j_coord = (G.node[j]['Latitude'], G.node[j]['Longitude'])
+    G.edge[i][j]['length'] = vincenty(i_coord, j_coord).miles
+
+# Find all of the shortest paths using the Floyd-Warshall algorithm
+fw_path = nx.floyd_warshall(G, weight='length')
+
+# Example virtual network for task 2
+virtual_nodes = {'ORLD': G.node['ORLD'], 'DLLS': G.node['DLLS'], 'WASH': G.node['WASH'], 'LA03': G.node['LA03']}
+virtual_nodes_2 = {'PHLA': G.node['PHLA'], 'HSTN': G.node['HSTN'], 'DNVR': G.node['DNVR'], 'RLGH': G.node['RLGH']}
+virtual_nodes_3 = {'SNAN': G.node['SNAN'], 'CHCG': G.node['CHCG'], 'NY54': G.node['NY54']}
+
+controller_node = 'PHNX'
+controller_node_2 = 'KSCY'
+controller_node_3 = 'STLS'
 
 virtual_networks = []
 controllers = []
@@ -76,7 +73,7 @@ print('\nTotal number of hypervisors: %s' % Q)
 print('Total number of trials: %s' % num_sim)
 print('Total number of virtual networks: %s' % num_vnets)
 
-# Trying out a Chinese network GML
+# The European GEANT network GML
 G = nx.read_gml('Geant2012.gml')
 
 # Add the length of each edge with the Vincenty function in GeoPy
@@ -145,11 +142,15 @@ for sim in range(1, num_sim+1):
     for m in range(0, len(v_list)):
         for d in v_list[m]['vnodes']:
             for v in G.nodes():
+                # The below for loop + constraint is the correct way according to the paper, but it takes an extremely
+                # long time to run 200 simulations with 140 networks this way. Much faster to use quicksum below.
+                # for w in G.nodes():
+                #     mod.addConstr(y_mdv[m,d,v] <= phys_node_hv[w,v])
                 mod.addConstr(y_mdv[m,d,v] <= quicksum(phys_node_hv[w,v] for w in G.nodes()))
 
     # Each physical SDN node is controlled by a single hypervisor instance.
-    for v in G.nodes():
-        mod.addConstr(quicksum(phys_node_hv[w,v] for w in G.nodes()) <= 1)
+    for w in G.nodes():
+        mod.addConstr(quicksum(phys_node_hv[w,v] for v in G.nodes()) <= 1)
 
     # Objective functions
     w = mod.addVar(name='max-latency')
@@ -202,11 +203,18 @@ for sim in range(1, num_sim+1):
     min_max_result = ''
     for key, value in mod.getAttr('x', possible_hv).items():
         if value == 1:
-            min_max_result = 'Gurobi Best HV for Max Latency: %s, %s' % (key, mod.ObjVal)
+            if min_max_result:
+                min_max_result = '%s, %s' % (min_max_result, key)
+            else:
+                min_max_result = key
+            if key in sim_max:
+                sim_max[key] += 1
+            else:
+                sim_max[key] = 1
+    min_max_result = 'Gurobi Best HV for Maximum Latency: %s - %s' % (min_max_result, mod.ObjVal)
 
     # Brute force method for max latency
     nodes_cost = {}
-    controller_count = 0
     for vnet in v_list:
         for name in G.nodes():
             sum = 0
@@ -221,17 +229,12 @@ for sim in range(1, num_sim+1):
                     nodes_cost[name] = max_length
             else:
                 nodes_cost[name] = max_length
-        controller_count += 1
         min_length = min(sum_list.items(), key=lambda x: x[1])
         if min_length[0] in nodes_cost:
             if nodes_cost[min_length[0]] < min_length[1]:
                 nodes_cost[min_length[0]] = min_length[1]
         else:
             nodes_cost[min_length[0]] = min_length[1]
-        if min_length[0] in freq_dict:
-            freq_dict[min_length[0]] += 1
-        else:
-            freq_dict[min_length[0]] = 1
     max_sorted_answer = sorted(nodes_cost.items(), key=operator.itemgetter(1), reverse=False)
 
     mod.setObjective(L_avg, GRB.MINIMIZE)
@@ -242,7 +245,15 @@ for sim in range(1, num_sim+1):
     avg_result = ''
     for key, value in mod.getAttr('x', possible_hv).items():
         if value == 1:
-            avg_result = 'Gurobi Best HV for Average Latency: %s, %s' % (key, mod.ObjVal)
+            if avg_result:
+                avg_result = '%s, %s' % (avg_result, key)
+            else:
+                avg_result = key
+            if key in sim_avg:
+                sim_avg[key] += 1
+            else:
+                sim_avg[key] = 1
+    avg_result = 'Gurobi Best HV for Average Latency: %s - %s' % (avg_result, mod.ObjVal)
 
     # Brute force method for average latency
     # This method is different from the others, because the dang thing wouldn't work correctly with the other outline
@@ -268,7 +279,15 @@ for sim in range(1, num_sim+1):
     avg_max_result = ''
     for key, value in mod.getAttr('x', possible_hv).items():
         if value == 1:
-            avg_max_result = 'Gurobi Best HV for Average-Maximum Latency: %s, %s' % (key, mod.ObjVal)
+            if avg_max_result:
+                avg_max_result = '%s, %s' % (avg_max_result, key)
+            else:
+                avg_max_result = key
+            if key in sim_avg_max:
+                sim_avg_max[key] += 1
+            else:
+                sim_avg_max[key] = 1
+    avg_max_result = 'Gurobi Best HV for Average-Maximum Latency: %s - %s' % (avg_max_result, mod.ObjVal)
 
     # Brute force method for average-max latency
     nodes_cost = {}
@@ -310,7 +329,15 @@ for sim in range(1, num_sim+1):
     max_avg_result = ''
     for key, value in mod.getAttr('x', possible_hv).items():
         if value == 1:
-            max_avg_result = 'Gurobi Best HV for Maximum-Average Latency: %s, %s' % (key, mod.ObjVal)
+            if max_avg_result:
+                max_avg_result = '%s, %s' % (max_avg_result, key)
+            else:
+                max_avg_result = key
+            if key in sim_max_avg:
+                sim_max_avg[key] += 1
+            else:
+                sim_max_avg[key] = 1
+    max_avg_result = 'Gurobi Best HV for Maximum-Average Latency: %s - %s' % (max_avg_result, mod.ObjVal)
 
     # Brute force method for max-average latency
     nodes_cost = {}
@@ -345,30 +372,10 @@ for sim in range(1, num_sim+1):
     print(avg_result)
     print(avg_max_result)
     print(max_avg_result)
-    print('\nBrute Force Best HV for Max Latency: %s, %s' % (max_sorted_answer[0][0], max_sorted_answer[0][1]))
-    print('Brute Force Best HV for Average Latency: %s, %s' % (lowest_hv, lowest_avg))
-    print('Brute Force Best HV for Average-Maximum Latency: %s, %s' % (avg_max_sorted_answer[0][0], avg_max_sorted_answer[0][1]))
-    print('Brute Force Best HV for Maximum-Average Latency: %s, %s' % (max_avg_sorted_answer[0][0], max_avg_sorted_answer[0][1]))
-
-    if max_sorted_answer[0][0] in sim_max:
-        sim_max[max_sorted_answer[0][0]] += 1
-    else:
-        sim_max[max_sorted_answer[0][0]] = 1
-
-    if lowest_hv in sim_avg:
-        sim_avg[lowest_hv] += 1
-    else:
-        sim_avg[lowest_hv] = 1
-
-    if avg_max_sorted_answer[0][0] in sim_avg_max:
-        sim_avg_max[avg_max_sorted_answer[0][0]] += 1
-    else:
-        sim_avg_max[avg_max_sorted_answer[0][0]] = 1
-
-    if max_avg_sorted_answer[0][0] in sim_max_avg:
-        sim_max_avg[max_avg_sorted_answer[0][0]] += 1
-    else:
-        sim_max_avg[max_avg_sorted_answer[0][0]] = 1
+    print('\nBrute Force Best HV for Max Latency: %s - %s' % (max_sorted_answer[0][0], max_sorted_answer[0][1]))
+    print('Brute Force Best HV for Average Latency: %s - %s' % (lowest_hv, lowest_avg))
+    print('Brute Force Best HV for Average-Maximum Latency: %s - %s' % (avg_max_sorted_answer[0][0], avg_max_sorted_answer[0][1]))
+    print('Brute Force Best HV for Maximum-Average Latency: %s - %s' % (max_avg_sorted_answer[0][0], max_avg_sorted_answer[0][1]))
 
 sim_max = sorted(sim_max.items(), key=operator.itemgetter(1), reverse=True)
 sim_avg = sorted(sim_avg.items(), key=operator.itemgetter(1), reverse=True)
